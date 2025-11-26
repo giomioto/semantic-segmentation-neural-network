@@ -3,17 +3,17 @@ import torchvision.transforms as T
 from torchvision import models
 from tkinter import Tk, filedialog
 from PIL import Image
-import json
+import numpy as np
+import os
 
 # ================================
 # CONFIGURAÇÕES
 # ================================
 
-MODEL_PATH = "outputs_multilabel/best_ml.pth"   # coloque o nome do seu modelo salvo
-USE_THRESHOLDS = True              # True = usar thresholds otimizados
-THRESHOLD_FILE = "outputs_multilabel/thresholds.json"  # se quiser salvar os thresholds
-
-# Dicionário de classes (ajuste caso necessário)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # pasta do script
+MODEL_PATH = os.path.join(BASE_DIR, "best_ml.pth")
+THRESHOLD_FILE = os.path.join(BASE_DIR, "best_thresholds.txt")
+USE_THRESHOLDS = True
 class_to_idx = {
     "Alface": 0, "Almondega": 1, "Arroz": 2, "BatataFrita": 3, "Beterraba": 4,
     "BifeBovinoChapa": 5, "CarneBovinaPanela": 6, "Cenoura": 7, "FeijaoCarioca": 8,
@@ -22,11 +22,13 @@ class_to_idx = {
 }
 idx_to_class = {v: k for k, v in class_to_idx.items()}
 
-# Se você salvou os thresholds em JSON
+# ================================
+# LEITURA DE THRESHOLDS
+# ================================
 if USE_THRESHOLDS:
     try:
-        with open(THRESHOLD_FILE, "r") as f:
-            thresholds = json.load(f)
+        th_values = np.loadtxt(THRESHOLD_FILE)
+        thresholds = {cls: float(th_values[i]) for i, cls in enumerate(class_to_idx)}
     except:
         print("⚠️ Aviso: arquivo de thresholds não encontrado. Usando threshold padrão = 0.5")
         thresholds = {c: 0.5 for c in class_to_idx.keys()}
@@ -37,10 +39,8 @@ else:
 # CARREGA MODELO
 # ================================
 num_classes = len(class_to_idx)
-
 model = models.resnet18(weights=None)
 model.fc = torch.nn.Linear(model.fc.in_features, num_classes)
-
 model.load_state_dict(torch.load(MODEL_PATH, map_location="cpu"))
 model.eval()
 
@@ -65,6 +65,7 @@ def predict_image(img_path):
         logits = model(tensor)
         probs = torch.sigmoid(logits)[0].numpy()
 
+    # aplica thresholds
     results = []
     for i, p in enumerate(probs):
         cls = idx_to_class[i]
@@ -72,13 +73,17 @@ def predict_image(img_path):
         if p >= th:
             results.append((cls, float(p), float(th)))
 
-    return results, probs
+    # top-3 mesmo abaixo do threshold
+    top_idx = probs.argsort()[::-1][:3]
+    top3 = [(idx_to_class[i], float(probs[i])) for i in top_idx]
+
+    return results, probs, top3
 
 # ================================
 # SELEÇÃO DA IMAGEM
 # ================================
 def pick_image():
-    Tk().withdraw()  # esconde a janela principal
+    Tk().withdraw()
     file_path = filedialog.askopenfilename(
         title="Selecione uma imagem",
         filetypes=[("Imagens", "*.jpg *.jpeg *.png")]
@@ -98,14 +103,18 @@ if __name__ == "__main__":
 
     print(f"\n🔍 Imagem selecionada: {path}\n")
 
-    classes, probs = predict_image(path)
+    classes, probs, top3 = predict_image(path)
 
-    print("=== RESULTADOS ===")
+    print("=== RESULTADOS COM THRESHOLD ===")
     if len(classes) == 0:
-        print("Nenhuma classe detectada.")
+        print("Nenhuma classe detectada acima do threshold.")
     else:
         for cls, p, th in classes:
             print(f"{cls}: prob={p:.3f}  |  threshold={th:.2f}")
+
+    print("\n=== TOP-3 CLASSES MESMO ABAIXO DO THRESHOLD ===")
+    for cls, p in top3:
+        print(f"{cls}: prob={p:.3f}")
 
     print("\n=== Probabilidades por classe ===")
     for i, p in enumerate(probs):
