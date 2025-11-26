@@ -50,7 +50,7 @@ Instale dependências:
 
 Execute o notebook:
 
-    notebooks/treino_pipeline.ipynb
+    notebooks/food_multilabel_training.ipynb
 
 Ou o script:
 
