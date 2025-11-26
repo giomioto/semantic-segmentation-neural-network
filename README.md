@@ -52,10 +52,6 @@ Execute o notebook:
 
     notebooks/food_multilabel_training.ipynb
 
-Ou o script:
-
-    python scripts/train_multilabel.py
-
 ## 🔍 Previsão manual
 
 Selecionar imagem pelo explorador:
