@@ -1,0 +1,22 @@
+Imagens_um_Alimento/
+Imagens_Varios_Alimentos/
+outputs_multilabel/
+
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+.ipynb_checkpoints/
+
+venv/
+env/
+.venv/
+.env
+
+.DS_Store
+Thumbs.db
+
+# --- Opcional (Arquivos gerados) ---
+# Se o test_predictions.json for gerado a cada rodada e você não quiser versionar:
+# test_predictions.json
