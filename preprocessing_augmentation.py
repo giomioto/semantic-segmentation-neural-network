@@ -8,8 +8,8 @@ import concurrent.futures
 # ================= CONFIGURAÇÕES DE DIRETÓRIOS =================
 INPUT_SINGLE = Path('Imagens_um_Alimento')
 INPUT_MULTI = Path('Imagens_Varios_Alimentos')
-OUTPUT_SINGLE = Path('Imagens_um_Alimento_Processadas2')
-OUTPUT_MULTI = Path('Imagens_Varios_Alimentos_Processadas2')
+OUTPUT_SINGLE = Path('Imagens_um_Alimento_Processadas')
+OUTPUT_MULTI = Path('Imagens_Varios_Alimentos_Processadas')
 # ===============================================================
 
 def criar_mascara_segmentacao_grabcut(img):
@@ -111,8 +111,8 @@ def processar_e_salvar(caminho_entrada, caminho_saida):
         if np.max(mascara) == 0: mascara[:] = 255
 
         fundo_removido = cv2.bitwise_and(img, img, mask=mascara)
-        img_realcada = aplicar_realce(fundo_removido)
-        img_final = cv2.bitwise_and(img_realcada, img_realcada, mask=mascara)
+        # img_realcada = aplicar_realce(fundo_removido)
+        img_final = cv2.bitwise_and(fundo_removido, fundo_removido, mask=mascara)
 
         cv2.imwrite(str(caminho_saida), img_final)
         return True
