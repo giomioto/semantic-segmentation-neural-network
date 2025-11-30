@@ -2,7 +2,7 @@ Imagens_um_Alimento/
 Imagens_Varios_Alimentos/
 Imagens_Varios_Alimentos_Processadas/
 Imagens_um_Alimento_Processadas/
-
+.gradio/
 __pycache__/
 *.pyc
 *.pyo
