@@ -1,8 +1,8 @@
 Imagens_um_Alimento/
 Imagens_Varios_Alimentos/
 outputs_multilabel/
-Imagens_Varios_Alimentos_Processadas2/
-Imagens_um_Alimento_Processadas2/
+Imagens_Varios_Alimentos_Processadas/
+Imagens_um_Alimento_Processadas/
 
 __pycache__/
 *.pyc
