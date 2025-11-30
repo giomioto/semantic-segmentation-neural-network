@@ -1,0 +1,2 @@
+Foto Original,Resultados da Detecção e Classificação,Imagem com Detecções,Primeiro Recorte Processado (Exemplo),timestamp
+.gradio\flagged\Foto Original\f84bc57e777ebf64b0ba\IMG_20140923_141843918.jpg,"[{""bounding_box"": [0, 0, 1936, 2287], ""yolo_class"": ""dining table"", ""classified_food"": ""Tomate"", ""confidence"": ""0.9645""}]",.gradio\flagged\Imagem com Detecções\1aefd012ff7130c8d2cb\image.webp,.gradio\flagged\Primeiro Recorte Processado Exemplo\0b2df776119a58cf8aae\image.webp,2025-11-29 21:09:03.993528
