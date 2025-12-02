@@ -24,7 +24,7 @@ except ImportError:
         return img_cv2
 
 # --- CONFIGURAÇÃO DA API DO GOOGLE GEMINI ---
-GOOGLE_API_KEY = "AIzaSyAz8EoHp53LC6rj92PWBbQcJ8TwIhcQxpk" 
+GOOGLE_API_KEY = "" 
 genai.configure(api_key=GOOGLE_API_KEY)
 
 # --- CONFIGURAÇÕES DO SEU MODELO  ---
