@@ -27,7 +27,7 @@ except ImportError:
 GOOGLE_API_KEY = "" 
 genai.configure(api_key=GOOGLE_API_KEY)
 
-# --- CONFIGURAÇÕES DO SEU MODELO  ---
+# --- CONFIGURAÇÕES DO MODELO  ---
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 CLASS_NAMES = ['Alface', 'Almondega', 'Arroz', 'BatataFrita', 'Beterraba', 
                'BifeBovinoChapa', 'CarneBovinaPanela', 'Cenoura', 'FeijaoCarioca', 
@@ -39,7 +39,7 @@ IMG_DIR = 'Imagens_Varios_Alimentos'  # Pasta com as imagens de teste
 THRESHOLD = 0.60
 MIN_CONTOUR_AREA = 500
 
-# --- CARREGAMENTO DO SEU MODELO ---
+# --- CARREGAMENTO DO MODELO ---
 def load_my_model():
     model = models.resnet18(weights=None)
     in_feats = model.fc.in_features
@@ -149,7 +149,7 @@ def run_evaluation():
             filename = os.path.basename(img_path)
             pil_img = Image.open(img_path).convert('RGB')
             
-            # 1. Predição do Seu Modelo
+            # 1. Predição do Modelo
             my_preds = set(predict_my_model(pil_img))
             
             # 2. Predição do Gemini (Ground Truth)
@@ -166,10 +166,10 @@ def run_evaluation():
             # Acertos (Intersecção): O que os dois concordam
             common = my_preds.intersection(gemini_preds)
             
-            # Alucinações (Seu modelo viu, mas não estava lá segundo Gemini)
+            # Alucinações (modelo viu, mas não estava lá segundo Gemini)
             false_positives = my_preds - gemini_preds
             
-            # Omissões (Estava lá, mas seu modelo não viu)
+            # Omissões (Estava lá, mas o modelo não viu)
             missed = gemini_preds - my_preds
             
             # Cálculo de Acurácia para esta imagem (Baseada no Gemini como verdade)
@@ -178,13 +178,13 @@ def run_evaluation():
             if len(gemini_preds) > 0:
                 accuracy_img = (len(common) / len(gemini_preds)) * 100
             else:
-                # Se o Gemini não viu nada da lista, e seu modelo tbm não: 100%. Se seu modelo viu: 0%
+                # Se o Gemini não viu nada da lista, e o modelo tbm não: 100%. Se o modelo viu: 0%
                 accuracy_img = 100.0 if len(my_preds) == 0 else 0.0
 
             results_data.append({
                 "Arquivo": filename,
                 "Gemini (Real)": ", ".join(gemini_preds),
-                "Seu Modelo (Pred)": ", ".join(my_preds),
+                "Modelo (Pred)": ", ".join(my_preds),
                 "Em Comum (Acerto)": ", ".join(common),
                 "Modelo Errou (Alucinação)": ", ".join(false_positives),
                 "Modelo Não Viu (Omissão)": ", ".join(missed),
