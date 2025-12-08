@@ -9,8 +9,8 @@ import concurrent.futures
 INPUT_SINGLE = Path('Imagens_um_Alimento')
 INPUT_MULTI  = Path('Imagens_Varios_Alimentos')
 
-OUTPUT_SINGLE = Path('Imagens_um_Alimento_Processadas2')
-OUTPUT_MULTI  = Path('Imagens_Varios_Alimentos_Processadas2')
+OUTPUT_SINGLE = Path('Imagens_um_Alimento_Processadas')
+OUTPUT_MULTI  = Path('Imagens_Varios_Alimentos_Processadas')
 # ===============================================================
 
 
