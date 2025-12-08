@@ -33,7 +33,7 @@ NUM_CLASSES = len(CLASS_NAMES)
 MODEL_PATH_CLASSIFICATION = 'outputs_multilabel/best_single.pth' # Caminho do modelo de classificação do usuário
 
 # Limite mínimo de confiança para a classificação
-CLASSIFICATION_THRESHOLD = 0.60 
+CLASSIFICATION_THRESHOLD = 0.30 
 
 # Parâmetros de PDI
 MIN_CONTOUR_AREA = 500 # Área mínima do contorno para ser considerado um alimento
@@ -99,13 +99,106 @@ def classify_single_crop(imagem_pil):
         logits = classification_model(img_tensor)
         probs = torch.softmax(logits, dim=1).cpu().numpy()[0]
 
-    top_index = np.argmax(probs)
-    top_class = CLASS_NAMES[top_index]
-    top_confidence = float(probs[top_index])
+    # Obtém os índices das 2 maiores probabilidades
+    top_indices = np.argsort(probs)[::-1][:2]
+    
+    top_classes = [CLASS_NAMES[i] for i in top_indices]
+    top_confidences = [float(probs[i]) for i in top_indices]
 
-    return top_class, top_confidence
+    # Retorna o Top-1 e o Top-2
+    return top_classes[0], top_confidences[0], top_classes[1], top_confidences[1]
 
-# --- 6. FUNÇÃO PRINCIPAL: ABORDAGEM SIMPLES DE GRADE 3X3 (3 SAÍDAS) ---
+# --- 6. FUNÇÃO AUXILIAR PARA GERAR GRADES ---
+def generate_grid_bboxes(x_start, y_start, width, height, cols, rows):
+    grid_bboxes = []
+    col_step = width / cols
+    row_step = height / rows
+    for i in range(cols):
+        for j in range(rows):
+            x1 = int(x_start + i * col_step)
+            y1 = int(y_start + j * row_step)
+            x2 = int(x_start + (i + 1) * col_step)
+            y2 = int(y_start + (j + 1) * row_step)
+            grid_bboxes.append((x1, y1, x2, y2))
+    return grid_bboxes
+
+# --- 7. FUNÇÃO DE CLASSIFICAÇÃO ADAPTATIVA (3X3 -> 2X2) ---
+def adaptive_classify_block(bbox_main, imagem_pil):
+    x1_main, y1_main, x2_main, y2_main = bbox_main
+    w_block = x2_main - x1_main
+    h_block = y2_main - y1_main
+
+    # 1. Classificar o bloco principal (3x3)
+    cropped_main = imagem_pil.crop(bbox_main)
+    class_main, conf_main, class_main_2, conf_main_2 = classify_single_crop(cropped_main)
+
+    # Se o bloco principal for muito pequeno, ignorar
+    if (w_block * h_block) < MIN_CONTOUR_AREA:
+        return None 
+
+    # 2. Gerar 2x2 sub-quadrantes
+    sub_bboxes = generate_grid_bboxes(x1_main, y1_main, w_block, h_block, 2, 2)
+    
+    sub_detections = []
+    
+    # 3. Classificar os 2x2 sub-quadrantes
+    for bbox_sub in sub_bboxes:
+        x1_sub, y1_sub, x2_sub, y2_sub = bbox_sub
+        w_sub = x2_sub - x1_sub
+        h_sub = y2_sub - y1_sub
+        
+        # Ignorar sub-quadrantes muito pequenos
+        if (w_sub * h_sub) < MIN_CONTOUR_AREA:
+            continue
+            
+        cropped_sub = imagem_pil.crop(bbox_sub)
+        class_sub, conf_sub, class_sub_2, conf_sub_2 = classify_single_crop(cropped_sub)
+        
+        sub_detections.append({
+            "bounding_box": bbox_sub,
+            "classified_food": class_sub,
+            "confidence": conf_sub,
+            "classified_food_2": class_sub_2,
+            "confidence_2": conf_sub_2
+        })
+
+    # 4. Aplicar a lógica adaptativa
+    
+    # Encontra a maior confiança entre os sub-quadrantes
+    max_sub_conf = max([det['confidence'] for det in sub_detections]) if sub_detections else 0.0
+    
+    # Se o score do quadrante principal for maior ou igual ao maior score dos subquadrantes,
+    # ou se não houver sub-quadrantes válidos, usa o quadrante principal.
+    # 5. Aplicar a lógica adaptativa
+    
+    # Encontra a maior confiança entre os sub-quadrantes (Top-1)
+    max_sub_conf = max([det['confidence'] for det in sub_detections]) if sub_detections else 0.0
+    
+    # Se o score do quadrante principal for maior ou igual ao maior score dos subquadrantes,
+    # ou se não houver sub-quadrantes válidos, usa o quadrante principal.
+    if conf_main >= max_sub_conf:
+        # Usa o quadrante principal
+        if conf_main >= CLASSIFICATION_THRESHOLD:
+            return {
+                "bounding_box": bbox_main,
+                "classified_food": class_main,
+                "confidence": conf_main,
+                "classified_food_2": class_main_2,
+                "confidence_2": conf_main_2
+            }
+        else:
+            # Se o principal não tiver confiança suficiente, não retorna nada para esta área
+            return None
+    else:
+        # Se o score de um subquadrante for maior, usa o subquadrante com maior score
+        best_sub_detection = max(sub_detections, key=lambda x: x['confidence'])
+        
+        if best_sub_detection['confidence'] >= CLASSIFICATION_THRESHOLD:
+            return best_sub_detection
+        else:
+            return None
+
+# --- 8. FUNÇÃO PRINCIPAL: ABORDAGEM DE GRADE ADAPTATIVA (3X3 -> 2X2) ---
 def classificar_comida(imagem_pil):
     if imagem_pil is None:
         return {}, Image.new('RGB', (224, 224), color = 'black'), {"status": "Erro: Imagem vazia."}
@@ -118,7 +211,7 @@ def classificar_comida(imagem_pil):
     # Obtém as dimensões da imagem
     img_h, img_w, _ = img_cv2.shape
 
-    # --- 6.1 Encontrar o Contorno Principal (Prato) ---
+    # --- 8.1 Encontrar o Contorno Principal (Prato) ---
     
     # Encontra os contornos na máscara do GrabCut
     contours, _ = cv2.findContours(mascara_grabcut, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -132,65 +225,53 @@ def classificar_comida(imagem_pil):
     # Obtém a caixa delimitadora do prato
     x_main, y_main, w_main, h_main = cv2.boundingRect(main_contour)
     
-    # --- 6.2 Estratégia de Divisão Simples (Grade 3x3) ---
+    # --- 8.2 Aplica a Grade 3x3 Principal e a Lógica Adaptativa ---
     
-    bboxes_to_classify = []
+    # 1. Grade 3x3 Principal
+    main_grid_bboxes = generate_grid_bboxes(x_main, y_main, w_main, h_main, 3, 3)
     
-    # Função auxiliar para gerar grades
-    def generate_grid_bboxes(cols, rows):
-        grid_bboxes = []
-        col_step = w_main / cols
-        row_step = h_main / rows
-        for i in range(cols):
-            for j in range(rows):
-                x1 = int(x_main + i * col_step)
-                y1 = int(y_main + j * row_step)
-                x2 = int(x_main + (i + 1) * col_step)
-                y2 = int(y_main + (j + 1) * row_step)
-                grid_bboxes.append((x1, y1, x2, y2))
-        return grid_bboxes
-
-    # Apenas a Grade 3x3 (9 recortes)
-    bboxes_to_classify.extend(generate_grid_bboxes(3, 3))
-
-    # Remove caixas muito pequenas
-    unique_bboxes = []
-    for bbox in bboxes_to_classify:
-        x1, y1, x2, y2 = bbox
-        # Garante que a área do recorte não seja muito pequena
-        if (x2 - x1) * (y2 - y1) > MIN_CONTOUR_AREA and bbox not in unique_bboxes:
-            unique_bboxes.append(bbox)
+    final_detections = []
+    
+    # 2. Aplica a lógica adaptativa a cada bloco 3x3
+    for bbox_main in main_grid_bboxes:
+        best_detection = adaptive_classify_block(bbox_main, imagem_pil)
+        if best_detection:
+            final_detections.append(best_detection)
 
     all_results_json = []
     consolidated_results_label = defaultdict(lambda: {"count": 0, "total_confidence": 0.0})
     
-    # --- 6.3 Classificação e Desenho ---
+    # --- 8.3 Desenho e Consolidação ---
     
-    for x1, y1, x2, y2 in unique_bboxes:
+    for det in final_detections:
+        x1, y1, x2, y2 = det['bounding_box']
+        top_class = det['classified_food']
+        confidence = det['confidence']
+        top_class_2 = det.get('classified_food_2', 'N/A')
+        confidence_2 = det.get('confidence_2', 0.0)
         
-        # Recorta a imagem original
-        cropped_img = imagem_pil.crop((x1, y1, x2, y2))
-        
-        # Classifica o recorte
-        top_class, confidence = classify_single_crop(cropped_img)
-        
-        # Armazena o resultado para a saída JSON e desenha a caixa (sem filtro de confiança)
+        # Armazena o resultado para a saída JSON (incluindo Top-2)
         all_results_json.append({
             "bounding_box": [x1, y1, x2, y2],
             "classified_food": top_class, 
-            "confidence": f"{confidence:.4f}"
+            "confidence": f"{confidence:.4f}",
+            "classified_food_2": top_class_2,
+            "confidence_2": f"{confidence_2:.4f}"
         })
         
         # Desenha a caixa e o rótulo na imagem processada para visualização
-        cv2.rectangle(img_cv2, (x1, y1), (x2, y2), (0, 255, 0), 2)
+        cv2.rectangle(img_cv2, (x1, y1), (x2, y2), (0, 255, 0), 2) # Linha mais grossa para o resultado final
+        # Desenha o Top-1 na imagem
         cv2.putText(img_cv2, f"{top_class} {confidence:.2f}", (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
+        # Opcional: Desenhar o Top-2 abaixo do Top-1
+        # if confidence_2 > 0.0:
+        #     cv2.putText(img_cv2, f"{top_class_2} {confidence_2:.2f}", (x1, y1 + 15), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
 
-        # Consolida o resultado para a saída Label SOMENTE se a confiança for alta
-        if confidence >= CLASSIFICATION_THRESHOLD:
-            consolidated_results_label[top_class]["count"] += 1
-            consolidated_results_label[top_class]["total_confidence"] += confidence
+        # Consolida o resultado para a saída Label (já filtrado pelo adaptive_classify_block)
+        consolidated_results_label[top_class]["count"] += 1
+        consolidated_results_label[top_class]["total_confidence"] += confidence
 
-    # --- 7. Prepara as 3 saídas para a interface Gradio original ---
+    # --- 9. Prepara as 3 saídas para a interface Gradio original ---
 
     # Saída 1: gr.Label (Alimentos Detectados Consolidado)
     resultados_label = {}
@@ -212,7 +293,7 @@ def classificar_comida(imagem_pil):
     # Retorna os 3 valores na ordem correta: Label, Imagem, JSON
     return resultados_label, img_with_boxes, resultados_detec
 
-# --- 8. INTERFACE GRADIO (ORIGINAL DO USUÁRIO REINTRODUZIDA) ---
+# --- 10. INTERFACE GRADIO (ORIGINAL DO USUÁRIO REINTRODUZIDA) ---
 interface = gr.Interface(
     fn=classificar_comida, 
     inputs=gr.Image(type="pil", label="Foto Original"), 
@@ -221,9 +302,9 @@ interface = gr.Interface(
         gr.Image(type="pil", label="Como a IA vê (Processada)"),
         gr.JSON(label="Detalhes da Detecção (Top 1 de cada recorte)")
     ],
-    title="Classificador de Alimentos por Grade 3x3 Fixa + ResNet",
+    title="Classificador de Alimentos por Grade Adaptativa (3x3 -> 2x2) + ResNet",
     description=(
-        f"Esta interface usa a máscara do GrabCut para encontrar o prato e o divide em uma grade 3x3 fixa para classificação. "
+        f"Esta interface usa uma grade 3x3 principal e subdivide em 2x2 apenas se a confiança do subquadrante for maior. "
         f"Apenas resultados de classificação com confiança > {CLASSIFICATION_THRESHOLD} são exibidos."
     )
 )
